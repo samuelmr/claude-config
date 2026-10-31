@@ -29,11 +29,24 @@ for h in "$repo"/hooks/*; do
 done
 
 # Register the Bash guard hook in settings.json once (settings.json itself stays machine-local).
+# python3 comes with the Command Line Tools that git needs; jq may be missing. The new file
+# replaces settings.json only once it has been written completely.
 settings="$claude/settings.json"
 [ -f "$settings" ] || echo '{}' >"$settings"
-if ! jq -e '[.hooks.PreToolUse[]?.hooks[]?.command] | index("~/.claude/hooks/bash-guard.sh")' "$settings" >/dev/null; then
-  cp "$settings" "$settings.bak-$stamp"
-  jq '.hooks.PreToolUse += [{"matcher": "Bash", "hooks": [{"type": "command", "command": "~/.claude/hooks/bash-guard.sh"}]}]' \
-    "$settings.bak-$stamp" >"$settings"
-  echo "added the bash-guard hook to settings.json (backup: $settings.bak-$stamp)"
-fi
+python3 - "$settings" "$stamp" <<'PY'
+import json, shutil, sys
+path, stamp = sys.argv[1], sys.argv[2]
+cmd = "~/.claude/hooks/bash-guard.sh"
+with open(path) as f:
+    settings = json.load(f)
+pre = settings.setdefault("hooks", {}).setdefault("PreToolUse", [])
+if any(h.get("command") == cmd for entry in pre for h in entry.get("hooks", [])):
+    sys.exit(0)
+pre.append({"matcher": "Bash", "hooks": [{"type": "command", "command": cmd}]})
+shutil.copy2(path, f"{path}.bak-{stamp}")
+with open(f"{path}.tmp", "w") as f:
+    json.dump(settings, f, indent=2, ensure_ascii=False)
+    f.write("\n")
+shutil.move(f"{path}.tmp", path)
+print(f"added the bash-guard hook to settings.json (backup: {path}.bak-{stamp})")
+PY

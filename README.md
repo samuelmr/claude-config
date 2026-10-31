@@ -8,7 +8,7 @@ git clone git@github.com:samuelmr/claude-config.git ~/github/claude-config
 ~/github/claude-config/install.sh
 ```
 
-Needs `jq` and `git`. `settings.json` stays machine-local (permissions differ between machines);
+Needs `git`, `python3` and `perl` (all present on macOS once the Command Line Tools are installed). `settings.json` stays machine-local (permissions differ between machines);
 the installer only adds the hook entry to it.
 
 ## Contents
