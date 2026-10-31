@@ -9,7 +9,8 @@ git clone git@github.com:samuelmr/claude-config.git ~/github/claude-config
 ```
 
 Needs `git`, `python3` and `perl` (all present on macOS once the Command Line Tools are installed). `settings.json` stays machine-local (permissions differ between machines);
-the installer only adds the hook entry to it.
+the installer only adds the hook entry to it. It also adds `.claude/worktrees/` to your global
+git ignore file, so worktrees made there never show up in, or get staged by, the main checkout.
 
 ## Contents
 

@@ -28,6 +28,17 @@ for h in "$repo"/hooks/*; do
   link "$h" "$claude/hooks/$(basename "$h")"
 done
 
+# Ignore worktrees under .claude/worktrees/ in every repo. Unignored, a `git add -A` in the
+# main checkout would stage each one as an embedded repository.
+ignore=$(git config --global --get core.excludesFile || true)
+ignore="${ignore/#\~/$HOME}"
+[ -n "$ignore" ] || ignore="${XDG_CONFIG_HOME:-$HOME/.config}/git/ignore"
+mkdir -p "$(dirname "$ignore")"
+if ! grep -qxF '.claude/worktrees/' "$ignore" 2>/dev/null; then
+  echo '.claude/worktrees/' >>"$ignore"
+  echo "ignored .claude/worktrees/ in $ignore"
+fi
+
 # Register the Bash guard hook in settings.json once (settings.json itself stays machine-local).
 # python3 comes with the Command Line Tools that git needs; jq may be missing. The new file
 # replaces settings.json only once it has been written completely.
