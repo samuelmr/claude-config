@@ -24,7 +24,11 @@ run in the main checkout: if `git rev-parse --show-toplevel` is not the first pa
    - An `in progress` task whose branch has new commits may have finished in another
      chat. Look at those commits, and ask the user whether it is ready for review.
    - Fix statuses that disagree with what is merged, and tell the user.
-3. Read the project's CLAUDE.md for its Verify, Try it, worktree and merge
+3. Check the task mailboxes in `<plan>/tasks/`. Delete the folder of any task that is
+   no longer `in progress` or `review`. In the others' `inbox.md`, set `Session` to
+   this session's name (ListAgents shows it), and handle unread outbox messages
+   (section 5).
+4. Read the project's CLAUDE.md for its Verify, Try it, worktree and merge
    conventions. Use format.md's defaults where it says nothing.
 
 ## 2. Propose a batch
@@ -90,35 +94,53 @@ Related decisions: <the relevant lines from decisions.md, if any>
    anything surprising; open questions. No code listings.
 ```
 
-**Interactive tasks: a chat the user can talk to.** Offer to start a background
-session for each:
+**Interactive tasks: a chat the user opens with `/work <n>`.** This session can't open
+a chat, and the user works in editor chats, not background sessions to attach to.
+Never run `claude --bg`. For each task:
 
-```sh
-claude --bg --name "<project>-<n>" --model <model> --effort <effort> \
-  "Work on task #<n> in the plan at <main checkout>/.claude/plan/plan.md. Read the card \
-and the project's CLAUDE.md. Create the worktree <worktree> on branch <branch> from main \
-and work there. Don't edit the plan. When the Done-when checks pass, stop and summarise \
-for the user."
-```
+1. Create the worktree: `git worktree add <worktree> -b <branch> main`.
+2. Run `${CLAUDE_SKILL_DIR}/plan-sync.sh task <n>` to create the task's mailbox
+   (format.md, "Task mailbox"). In its `inbox.md`, set `Session` to this session's
+   name and append the brief:
 
-Run it only after the user agrees, and if Bash is allowed; otherwise give the command
-to paste. The user attaches with `claude attach <project>-<n>`, or opens
-`claude agents`. If starting it from here fails, give the command to paste instead.
+   ```markdown
+   ## 1 · <date and time> · brief
+   - Worktree: <worktree> · Branch: <branch> (from main)
+   - Related decisions: <the relevant lines from decisions.md, or none>
+   - Notes: <anything the worker needs that the card doesn't say, or none>
+   ```
 
-An autonomous task too large for a subagent can run the same way, with
-`/goal <its Done-when checks pass>` as its first prompt instead.
+3. Give the user one line per task: "New chat · <model>, effort <effort>: `/work <n>`".
+
+An autonomous task too large for a subagent can run the same way; the user follows
+`/work <n>` with `/goal <its Done-when checks pass>`.
 
 ## 5. Monitor, review, merge
 
-Subagents notify this session when they finish. Background chats don't, so check
-their branches (`git log main..<branch>`) when the user comes back or asks.
+Subagents notify this session when they finish. Task chats write to their outbox
+instead and ring the doorbell, which wakes this session. A doorbell can miss (this
+chat was closed or renamed), so while any task runs in a chat, start every turn by
+reading each open outbox's new messages (those after `Read up to: outbox <k>` in its
+inbox), and handle them:
+
+- `plan`: apply a change that only touches that task's card. Show changes that affect
+  other tasks or the order to the user with your recommendation, and apply what they
+  accept. Tell the user in one line per change.
+- `decision`: add it to `decisions.md`.
+- `question`: answer it with an `answer` message in the inbox. Ask the user first if
+  it is theirs to decide.
+- `report`: check the branch (`git log main..<branch>`), then handle it as below.
+
+Then update `Read up to`, add a line to `log.md` for anything that changed the plan,
+push the plan, and ring the doorbell if you wrote to the inbox.
 
 When a task reports back:
 
 1. Record it in `log.md` in one or two lines, set the task to `review`, and push the
    plan.
 2. If the report has questions or failed checks, show them to the user first. The
-   subagent can be resumed with SendMessage to fix things.
+   subagent can be resumed with SendMessage to fix things; a task chat gets an
+   `answer` or `change` message in its inbox.
 3. If the change shows in the app and the project has a `## Try it` section, start it
    from the task's worktree on a free port, and give the user the link and one line
    on what to look at.
@@ -133,13 +155,14 @@ When a task reports back:
 - Merge in the main checkout with the project's merge style (default
   `git merge --no-ff <branch>`), and run the Verify commands on main.
 - Stop the app processes you started for this task (only yours, by port). Remove the
-  worktree and delete the branch.
+  worktree and delete the branch, and delete the task's mailbox `<plan>/tasks/<n>/`.
 - Move the task to `archive.md` with its merge commit, add a line to `log.md`, update
   the dependency graph, and push the plan. Don't push the project unless the user
   asks.
 
 **No:** leave everything in place, record what the user wants changed, and resume the
-subagent or continue in the chat to make the change.
+subagent to make the change. For a task chat, write it as a `change` message in the
+inbox and ring the doorbell; if the chat doesn't react, the user runs `/work` there.
 
 ## 6. Launch what unblocks
 

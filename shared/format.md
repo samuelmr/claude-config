@@ -21,10 +21,14 @@ Use `plan-sync.sh` (next to this file) for everything that touches the plan's gi
 - `plan-sync.sh pull`: fetches changes made on other machines. Run it before reading.
 - `plan-sync.sh push "<message>"`: commits the plan and pushes if there is a remote.
   Run it after every change.
+- `plan-sync.sh task <n>`: creates the mailbox of task `<n>` (see "Task mailbox") and
+  prints its folder.
 
 **One writer.** Only a session running in the main checkout edits the plan. A session
-in a worktree (a subagent, or a chat started for one task) never edits it: it reports
-back, and the session that started it records the result.
+doing one task (a subagent, or a chat opened with `/work`) never edits it, even
+though an editor chat starts in the main checkout: a subagent reports in its reply, a
+task chat writes only its own outbox, and the session that dispatched it records the
+result.
 
 ## Files
 
@@ -35,6 +39,7 @@ back, and the session that started it records the result.
 | `decisions.md` | numbered decisions with their reasons | all three |
 | `log.md` | append-only facts, newest last | all three |
 | `archive.md` | finished, dropped or split items, one line each | execute, refine |
+| `tasks/<n>/` | mailbox of a task running in its own chat; not in git | execute (`inbox.md`), the task chat (`outbox.md`) |
 
 Read only what the job needs. `archive.md` is rarely needed: just its numbers, to
 find the next free one.
@@ -142,8 +147,60 @@ Mode:
 - `autonomous`: a subagent can do it from the card alone, without asking anything.
 - `interactive`: the work needs the user along the way, for example approving
   wording, reviewing visuals round by round, hands-on testing on real devices or
-  third-party apps, or a credential only the user can enter. It runs in a chat the user can
-  talk to.
+  third-party apps, or a credential only the user can enter. It runs in a chat the user
+  opens with `/work <n>`.
+
+## Task mailbox
+
+A chat can't open another chat, so a task that runs in its own chat talks to the
+`/execute` chat through two files in `<plan>/tasks/<n>/`:
+
+- `inbox.md`: written only by the `/execute` chat. Message 1 is the brief.
+- `outbox.md`: written only by the task chat.
+
+`tasks/` is in the plan's `.gitignore`: messages never leave this machine, so a task
+chat runs on the same machine as its `/execute` chat. The `/execute` chat deletes the
+folder when the task is merged or dropped.
+
+Each file has a header, then messages appended under numbered headings, oldest first:
+
+```markdown
+# #14 · outbox (written by the task chat)
+
+Session: ctrldash-14
+Read up to: inbox 2
+
+## 1 · 2026-11-01 14:02 · plan
+Exporting needs a stable slug per note. Suggest a new task before #18: "Add note slugs".
+Agreed with the user: this task only reads slugs; it doesn't create them.
+
+## 2 · 2026-11-01 15:40 · report
+Branch 14-notes-export; ...
+```
+
+- `Session`: the writer's session name, as ListAgents shows it ("This session is
+  <name>"), or `-`.
+- `Read up to`: the last message of the *other* file that the writer has handled, so
+  nothing is handled twice, even after a chat's context has been summarised.
+- Inbox kinds: `brief`, `answer` (to a question), `change` (rework asked at review).
+- Outbox kinds: `plan` (a change to the plan, or to this task's scope or Done-when),
+  `decision` (with its reason), `question` (for the `/execute` chat, not the user),
+  `report` (the hand-back at the end).
+- Never edit or delete a message. Correct it with a new one.
+
+**Doorbell.** The files are the channel; the doorbell only says "look". Between chats
+on one machine, a SendMessage wakes an idle chat within seconds and reaches a busy one
+between its steps. A message to a closed chat fails at once and is lost, and a
+reopened chat keeps its history but gets a new session name. So:
+
+- Before writing a message, check this session's name (ListAgents: "This session is
+  <name>") and update your file's `Session` if it has changed.
+- After writing, if the other file's `Session` names a session that ListAgents lists,
+  send it one line: `New message in <plan>/tasks/<n>/<file>.md`.
+- If it isn't listed or the send fails, tell the user in one line: the other chat will
+  see the message when they next talk to it (`/execute`), or run `/work` there.
+- A doorbell that arrives in the middle of work waits for the next natural point:
+  finish the current step, then read.
 
 ## Conventions the skills read from the project
 
